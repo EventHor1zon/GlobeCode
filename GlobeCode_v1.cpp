@@ -19,18 +19,23 @@
 *   Will use 16-bit Timer1 for timing events
 *     Registers -  TCNT1, OCR1A, OCR1B, ICR1
 *
+*
+*  Note - concerns about img storage size!
 *  Note - will be using low-level C where possible, as familiarity with AVR code is a project objective
 *  Note - millis() check the timer it uses!
 */
 
-#define MAX 0xFFFF                // define max for comparisson
+#define MAX 0xFFFF                // define max value for timer1 for comparisson
+#define C_MAX 0xFF                // define max value for LED color frame
+#define BR_MAX 0x1F               // define max value for brightness frame
+
 
 
 unsigned int T_NOW;               // unsigned int works with the 16 bit timers
 unsigned int T_LAST;              // t_now, t_last used for working with rotation speed tracking
 unsigned int FRAME_T=0;           // frame_t is time between writing frames of the image
 unsigned long int TEMP;           // temp is used to store OCR1A before assigning. It may be bigger than 16 bit, hence long.
-unsigned int FRAME_C=0, FRAME_NO=400; //
+unsigned int FRAME_C=0, FRAME_LEN=0, FRAME_NO=400; //
 
 ISR(INT0_vect){                     //  Interrupt Vector on PORTD[2] - nano pin D2, PCB pin 20
     // if can't turn off interrupts during an interrupt, use flags instead.
@@ -59,27 +64,55 @@ ISR(TIM1_COMPA_vect){                     // interrupt on timer match; i.e FRAME
   SREG=sreg;                              // restore interrupts
 }
 
-setISR(){                                 // this function initialises the interrupts
-  attachInterrupt(INTRRUPT1, INT0_Vect, RISING);   // use more manual software method
+void spi_write(uint8_t x){                // SPI write function ( uses uint8_t as 8-byte val)
+    SPDR = x;                             // pass x into the 8 bit spi data reg
+    while ((SPSR & (1<<SPIF)) == 0);      // wait until SPI transaction concluded
+}
 
+void writeFrame(){                        // A single frame defined as a vertical slice of image.
+  for(int i; i < FRAME_LEN; i++)          // for each byte in frame
+  {
+    spi_write(IMG[i]);                  // write out frame[i]
+  }
+}
+
+void loadIMG(){                           // use this function to select an image based on
+  switch (IMG_NO) {                       // img_no - increment with button
+    case 1:
+  }
+
+}
+
+setISR(){                                          // this function initialises the interrupt INT0
+  //attachInterrupt(INTRRUPT1, INT0_Vect, RISING); - use more manual software method
+  DDRD &= ~(1 << DDD2);                            // Set PortD2 as input
+  EIMSK = (1 << INT0);                             // Enable int0 in ext. int. mask reg.
+  EICRA = (1 << ISC01) | (1 << ISC00);             // set up external interrupt 0 on RISING edge
+  sei();                                           // arduino macro to enable global interrupts
+}
+
+initSPI(){                                  // sets up SPI interface
+  PRR = (0 << PRSPI);                     // turns SPI on in Power Reduction registers
+  DDRB = (1<<DDB2)|(1<<DDB3)|(1<<DDB5);   // init PortB pins as output - SS, MOSI, SCK
+  PORTB &= ~(1<<PB2);                     // set SS pin low - LEDs are dumb (technical term) so keep active.
 }
 
 void setup(){
   // set-up - set pin3 clk, pin4 data, pin5 enable(out), pin6 ISR(in,rot), pin7 ISR(in,fault), pin8 out(statusled)
   // pin9 input(button1), pin10 input(button2)
   setISR();
+  initSPI();
   if(DEBUG) Serial.begin(9600);            // if in debug mode, start serial port
-
 }
 
 
 void loop(){
-  // loop - do initialisation then set flag; do check speed; do set led flag @ threshold; do led timer set; //
-  if( vel > THRESHOLD)
+  // loop - do initialisation then set flag; do check speed; do set led flag @ threshold; do led timer set; /
+  if(THRESHOLD)
   {
       if(SPI_W)
       {
-        writeSPI(frame_no, numleds, etc);   // write data out SPI
+        writeFrame(frameNo);   // write data out SPI
               }
 
   }
